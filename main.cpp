@@ -5,7 +5,14 @@
 #include <string>
 #include <vector>
 
+// Define buffer size
 #define MAX_BUFFER 1024
+
+// Structure to hold column data
+struct ColumnData {
+    std::string columnName;
+    std::string value;
+};
 
 // Function to check SQL return codes and print errors
 void CheckSQLReturnCode(SQLRETURN retCode, SQLHANDLE handle, SQLSMALLINT handleType, const char* msg) {
@@ -22,89 +29,150 @@ void CheckSQLReturnCode(SQLRETURN retCode, SQLHANDLE handle, SQLSMALLINT handleT
 // Function to connect to the database
 void ConnectToDatabase(SQLHENV& hEnv, SQLHDBC& hDbc) {
     SQLRETURN retCode;
-
-    // ODBC connection string
     SQLCHAR connStr[] = "Driver={ODBC Driver 17 for SQL Server};Server=DESKTOP-UQ6MEMJ;Database=Inventory;Trusted_Connection=yes;";
 
-    // Allocate an environment handle
     retCode = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &hEnv);
     CheckSQLReturnCode(retCode, hEnv, SQL_HANDLE_ENV, "Error allocating environment handle.");
 
-    // Set ODBC version
     retCode = SQLSetEnvAttr(hEnv, SQL_ATTR_ODBC_VERSION, (SQLPOINTER)SQL_OV_ODBC3, 0);
     CheckSQLReturnCode(retCode, hEnv, SQL_HANDLE_ENV, "Error setting ODBC version.");
 
-    // Allocate a connection handle
     retCode = SQLAllocHandle(SQL_HANDLE_DBC, hEnv, &hDbc);
     CheckSQLReturnCode(retCode, hDbc, SQL_HANDLE_DBC, "Error allocating connection handle.");
 
-    // Connect to the database
     retCode = SQLDriverConnectA(hDbc, NULL, connStr, SQL_NTS, NULL, 0, NULL, SQL_DRIVER_NOPROMPT);
     CheckSQLReturnCode(retCode, hDbc, SQL_HANDLE_DBC, "Error connecting to the database.");
 }
 
-// Function to insert a new product into the database
-void InsertRecord(SQLHDBC& hDbc, const std::string& productName, const double price) {
+// Generic Insert Function
+void InsertRecord(SQLHDBC& hDbc, const std::string& tableName, const std::vector<ColumnData>& columns) {
     SQLHSTMT hStmt;
     SQLRETURN retCode;
 
-    // Allocate a statement handle
     retCode = SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
     CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error allocating statement handle.");
 
-    // SQL insert query
-    SQLCHAR query[] = "INSERT INTO Products (ProductName, Price) VALUES (?, ?)";
-    retCode = SQLPrepareA(hStmt, query, SQL_NTS);
+    std::string query = "INSERT INTO " + tableName + " (";
+    for (size_t i = 0; i < columns.size(); ++i) {
+        query += columns[i].columnName;
+        if (i < columns.size() - 1) query += ", ";
+    }
+    query += ") VALUES (";
+    for (size_t i = 0; i < columns.size(); ++i) {
+        query += "?";
+        if (i < columns.size() - 1) query += ", ";
+    }
+    query += ")";
+
+    retCode = SQLPrepareA(hStmt, (SQLCHAR*)query.c_str(), SQL_NTS);
     CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error preparing insert statement.");
 
-    // Bind the product name parameter
-    retCode = SQLBindParameter(hStmt, 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, (SQLPOINTER)productName.c_str(), productName.length(), NULL);
-    CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error binding ProductName parameter.");
+    for (size_t i = 0; i < columns.size(); ++i) {
+        retCode = SQLBindParameter(hStmt, i + 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, (SQLPOINTER)columns[i].value.c_str(), columns[i].value.length(), NULL);
+        CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error binding parameter.");
+    }
 
-    // Bind the price parameter
-    retCode = SQLBindParameter(hStmt, 2, SQL_PARAM_INPUT, SQL_C_DOUBLE, SQL_FLOAT, 0, 0, (SQLPOINTER)&price, 0, NULL);
-    CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error binding Price parameter.");
-
-    // Execute the insert query
     retCode = SQLExecute(hStmt);
     if (retCode != SQL_SUCCESS && retCode != SQL_SUCCESS_WITH_INFO) {
-        std::cerr << "Error executing insert query." << std::endl;
+        std::cerr << "Error executing insert query for table " << tableName << "." << std::endl;
         CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error executing insert query.");
     }
     else {
-        std::cout << "Product inserted successfully." << std::endl;
+        std::cout << "Record inserted successfully into " << tableName << " table." << std::endl;
     }
 
-    // Free statement handle
     SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
 }
-void ReadRecords(SQLHDBC& hDbc) {
+
+// Generic Update Function
+void UpdateRecord(SQLHDBC& hDbc, const std::string& tableName, const std::vector<ColumnData>& columns, const std::string& condition) {
     SQLHSTMT hStmt;
     SQLRETURN retCode;
 
     retCode = SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
     CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error allocating statement handle.");
 
-    SQLCHAR query[] = "SELECT ProductID, ProductName, Price FROM Products";
-    retCode = SQLExecDirectA(hStmt, query, SQL_NTS);
-    CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error executing SELECT query.");
+    std::string query = "UPDATE " + tableName + " SET ";
+    for (size_t i = 0; i < columns.size(); ++i) {
+        query += columns[i].columnName + " = ?";
+        if (i < columns.size() - 1) query += ", ";
+    }
+    query += " WHERE " + condition;
 
-    SQLINTEGER productID;
-    SQLCHAR productName[MAX_BUFFER];
-    SQLDOUBLE price;
+    retCode = SQLPrepareA(hStmt, (SQLCHAR*)query.c_str(), SQL_NTS);
+    CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error preparing update statement.");
 
-    while (SQLFetch(hStmt) == SQL_SUCCESS) {
-        SQLGetData(hStmt, 1, SQL_C_LONG, &productID, 0, NULL);
-        SQLGetData(hStmt, 2, SQL_C_CHAR, productName, sizeof(productName), NULL);
-        SQLGetData(hStmt, 3, SQL_C_DOUBLE, &price, 0, NULL);
+    for (size_t i = 0; i < columns.size(); ++i) {
+        retCode = SQLBindParameter(hStmt, i + 1, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_VARCHAR, 0, 0, (SQLPOINTER)columns[i].value.c_str(), columns[i].value.length(), NULL);
+        CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error binding parameter.");
+    }
 
-        std::cout << "Product ID: " << productID << ", Product Name: " << productName << ", Price: $" << price << std::endl;
+    retCode = SQLExecute(hStmt);
+    if (retCode != SQL_SUCCESS && retCode != SQL_SUCCESS_WITH_INFO) {
+        std::cerr << "Error executing update query for table " << tableName << "." << std::endl;
+        CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error executing update query.");
+    }
+    else {
+        std::cout << "Record updated successfully in " << tableName << " table." << std::endl;
     }
 
     SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
 }
 
-// Function to disconnect from the database and free resources
+// Generic Delete Function
+void DeleteRecord(SQLHDBC& hDbc, const std::string& tableName, const std::string& condition) {
+    SQLHSTMT hStmt;
+    SQLRETURN retCode;
+
+    retCode = SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
+    CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error allocating statement handle.");
+
+    std::string query = "DELETE FROM " + tableName + " WHERE " + condition;
+
+    retCode = SQLExecDirectA(hStmt, (SQLCHAR*)query.c_str(), SQL_NTS);
+    if (retCode != SQL_SUCCESS && retCode != SQL_SUCCESS_WITH_INFO) {
+        std::cerr << "Error executing delete query for table " << tableName << "." << std::endl;
+        CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error executing delete query.");
+    }
+    else {
+        std::cout << "Record deleted successfully from " << tableName << " table." << std::endl;
+    }
+
+    SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+}
+
+// Generic Select Function
+void SelectRecords(SQLHDBC& hDbc, const std::string& tableName, const std::vector<std::string>& columns, const std::string& condition) {
+    SQLHSTMT hStmt;
+    SQLRETURN retCode;
+
+    retCode = SQLAllocHandle(SQL_HANDLE_STMT, hDbc, &hStmt);
+    CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error allocating statement handle.");
+
+    std::string query = "SELECT ";
+    for (size_t i = 0; i < columns.size(); ++i) {
+        query += columns[i];
+        if (i < columns.size() - 1) query += ", ";
+    }
+    query += " FROM " + tableName;
+    if (!condition.empty()) query += " WHERE " + condition;
+
+    retCode = SQLExecDirectA(hStmt, (SQLCHAR*)query.c_str(), SQL_NTS);
+    CheckSQLReturnCode(retCode, hStmt, SQL_HANDLE_STMT, "Error executing select query.");
+
+    SQLCHAR buffer[MAX_BUFFER];
+    while (SQLFetch(hStmt) == SQL_SUCCESS) {
+        for (size_t i = 0; i < columns.size(); ++i) {
+            SQLGetData(hStmt, i + 1, SQL_C_CHAR, buffer, MAX_BUFFER, NULL);
+            std::cout << columns[i] << ": " << buffer << "\t";
+        }
+        std::cout << std::endl;
+    }
+
+    SQLFreeHandle(SQL_HANDLE_STMT, hStmt);
+}
+
+// Function to disconnect from the database
 void DisconnectDatabase(SQLHENV& hEnv, SQLHDBC& hDbc) {
     SQLFreeHandle(SQL_HANDLE_DBC, hDbc);
     SQLFreeHandle(SQL_HANDLE_ENV, hEnv);
@@ -117,15 +185,27 @@ int main() {
     // Connect to the database
     ConnectToDatabase(hEnv, hDbc);
 
-    // Insert a new product
-    InsertRecord(hDbc, "Washing Machine", -50.99);
+    // Example usage for Inventory table
+    // Insert a new record into Inventory table
+    std::vector<ColumnData> columns = { {"SupplierName", "Vazha"}, {"ContactInfo", "Vazhako123"}, {"Address", "Landiastr"} };
+    InsertRecord(hDbc, "Suppliers", columns);  // Ensure column names are correct for your DB schema
 
-    // Read - Display all products
-    std::cout << "\nCurrent Products in Database:" << std::endl;
-    ReadRecords(hDbc);
+    //Select and display the updated records from Inventory table
+    SelectRecords(hDbc, "Suppliers", {"SupplierID", "SupplierName", "ContactInfo", "Address" }, "1=1");
+
+    // Delete the record for 'Table' from Inventory table
+    DeleteRecord(hDbc, "Suppliers", "SupplierID= '4'");
+    
+    // Update the quantity of the 'Table' item in Inventory table
+    columns = { {"SupplierName", "Mamuka"} };
+    UpdateRecord(hDbc, "Suppliers", columns, "SupplierName = 'Vazha'");
 
     // Disconnect from the database
     DisconnectDatabase(hEnv, hDbc);
 
     return 0;
 }
+
+
+
+

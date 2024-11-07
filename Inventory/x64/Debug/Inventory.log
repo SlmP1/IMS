@@ -1,2 +1,5 @@
 ﻿  main.cpp
-  Inventory.vcxproj -> C:\Users\Giorgio_Calabria\source\repos\Inventory Management System\Inventory\x64\Debug\Inventory.exe
+B:\Dev\project\Inventory Management System\Inventory\main.cpp(71,45): warning C4267: 'argument': conversion from 'size_t' to 'SQLUSMALLINT', possible loss of data
+B:\Dev\project\Inventory Management System\Inventory\main.cpp(106,45): warning C4267: 'argument': conversion from 'size_t' to 'SQLUSMALLINT', possible loss of data
+B:\Dev\project\Inventory Management System\Inventory\main.cpp(166,33): warning C4267: 'argument': conversion from 'size_t' to 'SQLUSMALLINT', possible loss of data
+  Inventory.vcxproj -> B:\Dev\project\Inventory Management System\Inventory\x64\Debug\Inventory.exe
