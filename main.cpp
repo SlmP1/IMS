@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <limits>
 
 // Define buffer size
 #define MAX_BUFFER 1024
@@ -185,26 +186,132 @@ int main() {
     // Connect to the database
     ConnectToDatabase(hEnv, hDbc);
 
-    // Example usage for Inventory table
-    // Insert a new record into Inventory table
-    std::vector<ColumnData> columns = { {"SupplierName", "Vazha"}, {"ContactInfo", "Vazhako123"}, {"Address", "Landiastr"} };
-    InsertRecord(hDbc, "Suppliers", columns);  // Ensure column names are correct for your DB schema
+    while (true) {
+        int choice;
+        std::string tableName;
 
-    //Select and display the updated records from Inventory table
-    SelectRecords(hDbc, "Suppliers", {"SupplierID", "SupplierName", "ContactInfo", "Address" }, "1=1");
+        std::cout << "Choose an operation:\n";
+        std::cout << "1. Insert\n";
+        std::cout << "2. Select\n";
+        std::cout << "3. Update\n";
+        std::cout << "4. Delete\n";
+        std::cout << "5. Exit\n";
 
-    // Delete the record for 'Table' from Inventory table
-    DeleteRecord(hDbc, "Suppliers", "SupplierID= '4'");
-    
-    // Update the quantity of the 'Table' item in Inventory table
-    columns = { {"SupplierName", "Mamuka"} };
-    UpdateRecord(hDbc, "Suppliers", columns, "SupplierName = 'Vazha'");
+        // Loop for validating the user input for the choice
+        while (true) {
+            std::cout << "Enter your choice (1-5): ";
+            std::cin >> choice;
+
+            // Check if the input is invalid
+            if (std::cin.fail()) {
+                // Clear the error flag and ignore the incorrect input
+                std::cin.clear();  // Clear the error flag
+                // Discard the rest of the current input line (until newline)
+                std::cin.ignore(1000, '\n');
+
+                std::cout << "Invalid input. Please enter an integer between 1 and 5.\n";
+            }
+            else if (choice < 1 || choice > 5) {
+                std::cout << "Choice must be between 1 and 5. Please try again.\n";
+            }
+            else {
+                // If choice is valid, break out of the loop
+                break;
+            }
+        }
+
+        // Exit if the user chooses 5
+        if (choice == 5) {
+            std::cout << "Exiting program.\n";
+            break;
+        }
+
+        // Prompt for table name once at the beginning of each operation
+        std::cout << "Enter the table name: ";
+        std::cin >> tableName;
+
+        if (choice == 1) {  // Insert Record
+            int numColumns;
+            std::cout << "Enter the number of columns: ";
+            std::cin >> numColumns;
+
+            std::vector<ColumnData> columns;
+            for (int i = 0; i < numColumns; ++i) {
+                ColumnData col;
+                std::cout << "Enter column name: ";
+                std::cin >> col.columnName;
+                std::cout << "Enter value for " << col.columnName << ": ";
+                std::cin >> col.value;
+                columns.push_back(col);
+            }
+            // Call InsertRecord method
+            InsertRecord(hDbc, tableName, columns);
+        }
+        else if (choice == 2) {  // Select Records
+            int numColumns;
+            std::cout << "Enter the number of columns to select: ";
+            std::cin >> numColumns;
+
+            std::vector<std::string> columns;
+            for (int i = 0; i < numColumns; ++i) {
+                std::string column;
+                std::cout << "Enter column name: ";
+                std::cin >> column;
+                columns.push_back(column);
+            }
+
+            std::string condition;
+            std::cout << "Enter condition for selection (leave blank for no condition): ";
+            std::cin.ignore();  // Clear the newline from the buffer
+            std::getline(std::cin, condition);
+
+            // Call SelectRecords method
+            SelectRecords(hDbc, tableName, columns, condition);
+        }
+        else if (choice == 3) {  // Update Record
+            int numColumns;
+            std::cout << "Enter the number of columns to update: ";
+            std::cin >> numColumns;
+
+            std::vector<ColumnData> columns;
+            for (int i = 0; i < numColumns; ++i) {
+                ColumnData col;
+                std::cout << "Enter column name: ";
+                std::cin >> col.columnName;
+                std::cout << "Enter new value for " << col.columnName << ": ";
+                std::cin >> col.value;
+                columns.push_back(col);
+            }
+
+            std::string condition;
+            std::cout << "Enter the condition for the update (e.g., \"SupplierID = 4\"): ";
+            std::cin.ignore(); // Clear the newline from the buffer
+            std::getline(std::cin, condition);
+
+            // Call UpdateRecord method
+            UpdateRecord(hDbc, tableName, columns, condition);
+        }
+        else if (choice == 4) {  // Delete Record
+            std::string condition;
+            std::cout << "Enter the condition for deletion (e.g., \"SupplierID = 4\"): ";
+            std::cin.ignore(); // Clear the newline from the buffer
+            std::getline(std::cin, condition);
+
+            // Call DeleteRecord method
+            DeleteRecord(hDbc, tableName, condition);
+        }
+        else {
+            std::cout << "Invalid choice. Please try again.\n";
+        }
+    }
 
     // Disconnect from the database
     DisconnectDatabase(hEnv, hDbc);
 
     return 0;
 }
+
+
 
 
 
